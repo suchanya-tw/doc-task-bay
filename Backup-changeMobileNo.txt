@@ -1,0 +1,711 @@
+package bay.epayment.authenimprove.action;
+
+import bay.epayment.authenimprove.exeption.AuthenFailedException;
+import bay.epayment.authenimprove.exeption.FlowFailedException;
+import bay.epayment.authenimprove.model.PushNotiModel;
+import bay.epayment.authenimprove.model.PushNotiModelResponse;
+import bay.epayment.authenimprove.model.entity.EpayAuthLogRequest;
+import bay.epayment.authenimprove.model.entity.EpayAuthProfile;
+import bay.epayment.authenimprove.model.entity.EpayAuthenProfileDto;
+import bay.epayment.authenimprove.model.entity.EpayMobileCountryCode;
+import bay.epayment.authenimprove.model.kma.AuthenImproveRequest;
+import bay.epayment.authenimprove.service.AuthenImproveService;
+import bay.epayment.common.Constants;
+import bay.epayment.common.ConstantsPayment;
+import bay.epayment.common.ConstantsTransaction;
+import bay.epayment.common.exception.DataNotFoundException;
+import bay.epayment.common.exception.PopulateDataException;
+import bay.epayment.common.exception.UpdateDataException;
+import bay.epayment.payment.struts.AbstractCommonPaymentAction;
+import bay.epayment.payment.struts.DirectDebitRequestAction;
+import bay.epayment.schema.transaction.AccountList;
+import bay.epayment.schema.transaction.Transaction;
+import bay.epayment.service.OtpService;
+import bay.epayment.utility.WebUtil;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.WriterException;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.krungsri.authenimprove.AuthenImproveConstant;
+import com.krungsri.authenimprove.kbolws.WSAuthen;
+import com.krungsri.kolws.KOLWSConstants;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.struts.action.ActionForm;
+import org.apache.struts.action.ActionForward;
+import org.apache.struts.action.ActionMapping;
+import org.apache.struts.validator.DynaValidatorForm;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.context.support.WebApplicationContextUtils;
+import ws.improveauthen.kbol.AuthenUserEntity;
+
+import javax.imageio.ImageIO;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Timestamp;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.List;
+
+
+public class ChangeMobileNoRequestAction  extends AbstractCommonPaymentAction {
+    private static final Logger logger = LoggerFactory.getLogger(DirectDebitRequestAction.class);
+
+    public ActionForward enterData(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.debug("enterData");
+        try {
+            String userType = request.getParameter("userType");
+            request.getSession().setAttribute(AuthenImproveConstant.SESSION_KEY.USER_TYPE, userType);
+        }catch (Exception e){
+            return forward("failure", mapping);
+        }
+        return forward("success", mapping);
+    }
+
+    public ActionForward info(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.debug("info check mobileNo old ");
+        try {
+            String mobileNoOld = request.getParameter("mobileNoOld");
+            String mobileNoNew = request.getParameter("mobileNoNew");
+            logger.info("mobileNo (old) :" + mobileNoOld);
+            logger.info("mobileNo (new) :" + mobileNoNew);
+            Transaction transaction = null;
+            transaction = WebUtil.getTransaction(request);
+            WebApplicationContext context = WebApplicationContextUtils.getRequiredWebApplicationContext(request.getServletContext());
+            if (transaction != null) {
+                Long.parseLong(transaction.getPaymentRequestType());
+            }
+            request.getSession().setAttribute("mobileNoNew", mobileNoNew);
+            //logic check mobileNo old
+            AuthenImproveService improveService = new AuthenImproveService();
+            List<EpayAuthenProfileDto>  profileList = improveService.checkMobileNoOld(mobileNoOld);
+            if(profileList.size()>0){
+                logger.info("mobileNo old is correct");
+            }else{
+                request.setAttribute("MessageCode", "99");
+                return forward("reinput", mapping);
+            }
+
+        }catch (Exception e){
+            return forward("fail", mapping);
+        }
+
+        return forward("success", mapping);
+    }
+
+    public ActionForward doProcess(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.debug("Begin DirectDebitPaymentAction");
+        try{
+            String username = request.getParameter("username");
+            String password = request.getParameter("password");
+            String mobileNoNew = (String) request.getSession().getAttribute("mobileNoNew");
+            logger.info("username :" + username);
+            logger.info("password :" + password);
+            request.getSession().setAttribute("KBOLUsername", username);
+            request.getSession().setAttribute("KBOLPassword", password);
+            Transaction transaction = null;
+            transaction = WebUtil.getTransaction(request);
+            WebApplicationContext context = WebApplicationContextUtils.getRequiredWebApplicationContext(request.getServletContext());
+            if (transaction != null) {
+                Long.parseLong(transaction.getPaymentRequestType());
+            }
+            AuthenUserEntity userEntity;
+            WSAuthen service = new WSAuthen();
+            boolean hasAuthenPass = service.authen(username, password, KOLWSConstants.SME_CORP);
+            if(hasAuthenPass){
+                    logger.info("authen success");
+                    userEntity = service.getUser();
+                if(mobileNoNew.equals(userEntity.getMobileNo())) {
+                    boolean isLocalMobileNo = (userEntity.getMobileCountryCode() == null || userEntity.getMobileCountryCode().length() == 0 || "66".equals(userEntity.getMobileCountryCode()));
+                    AuthenImproveService improceService = new AuthenImproveService();
+                    String otpProfile = improceService.getOtpProfile(isLocalMobileNo, KOLWSConstants.SME_CORP);
+                    OtpService otpService = context.getBean(OtpService.class);
+                    Map<String, String> map = otpService.genOTPByWS(otpProfile, username, userEntity, KOLWSConstants.SME_CORP);
+                    request.getSession().setAttribute("KBOLWSUserEntity", userEntity);
+                    logger.info("OTP result: {}", map);
+                    logger.debug("end : call OTP");
+
+                    if (map == null || map.isEmpty()) {
+                        throw new Exception("Empty OTP result");
+                    }
+                    //send otp
+                    String responseCode = map.get(ConstantsTransaction.TRANS_CALL_OTP_RESPONSE_CODE);
+                    String refNo = map.get(ConstantsTransaction.TRANS_CALL_OTP_REF_NO);
+                    if (StringUtils.isBlank(responseCode)) {
+                        logger.info("Empty response code");
+                        return forwardFailure(mapping, request, ConstantsPayment.LOG_SUCCESS_CHECK_KOL_STATUS, "7812", null);
+                    }
+                    if ("00".equals(responseCode)) {
+                        transaction.setOTPRefNo(refNo);
+                        transaction.setOTPMobileNumber(userEntity.getMobileNo());
+                        transaction.setUserName(username);
+                        request.getSession().setAttribute("OTPProfile", otpProfile);
+                    }
+                    return forward("success", mapping);
+                }else{
+                    logger.info("Inccorect mobileNo new");
+                    request.setAttribute("MessageCode", "99MBNEW");
+                    return forward("retry", mapping);
+                }
+            }else{
+                logger.info("authen KBOL fail");
+                request.setAttribute("MessageCode", "99KBOL");
+                return forward("retry", mapping);
+            }
+
+        }catch (Exception e){
+            request.setAttribute("MessageCode", "99KBOL");
+            return forward("retry", mapping);
+        }
+
+    }
+
+    public ActionForward changeMobileNoVerifyOTP(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.debug("Begin changeMobileNoVerifyOTP");
+        try{
+            String otpPassword = request.getParameter("otpPassword");
+            Transaction transaction = null;
+            transaction = WebUtil.getTransaction(request);
+            WebApplicationContext context = WebApplicationContextUtils.getRequiredWebApplicationContext(request.getServletContext());
+            if (transaction != null) {
+                Long.parseLong(transaction.getPaymentRequestType());
+            }
+
+            String otpProfile = (String) request.getSession().getAttribute("OTPProfile");
+            String userName = transaction.getUserName();
+            String refNo = transaction.getOTPRefNo();
+            OtpService otpService = context.getBean(OtpService.class);
+            Map<String, String> map = otpService.verifyOTPByWS(otpProfile, userName, KOLWSConstants.SME_CORP, refNo, otpPassword);
+
+            if (map == null || map.isEmpty()) {
+                logger.info("Empty OTP result");
+                return forwardFailure(mapping, request, ConstantsPayment.LOG_SUCCESS_CHECK_KOL_STATUS, "7812", null);
+            }
+
+            String responseCode = map.get(ConstantsTransaction.TRANS_CALL_OTP_RESPONSE_CODE);
+            String responseDesc = map.get(ConstantsTransaction.TRANS_CALL_OTP_RESPONSE_DESC);
+
+            if (StringUtils.isBlank(responseCode)) {
+                logger.info("Empty response code");
+                return forwardFailure(mapping, request, ConstantsPayment.LOG_SUCCESS_CHECK_KOL_STATUS, "7812", null);
+            }
+
+            if ("00".equals(responseCode)) {
+                logger.info("Verify OTP success with response code: {}, desc: {}", responseCode, responseDesc);
+                String mobileNoNew = (String) request.getSession().getAttribute("mobileNoNew");
+                //logic update mobileNo
+                    AuthenImproveService improceService = new AuthenImproveService();
+                    boolean updateDB = improceService.updateNewMobileNo(mobileNoNew , userName);
+                    if(updateDB){
+                        return forward("success", mapping);
+                    }else {
+                        logger.info("update fail : cannot find username :" + userName);
+                        request.setAttribute("MessageCode", "99DBFail");
+                        return forward("retry", mapping);
+                    }
+
+            }else{
+                logger.info("Verify OTP fail with response code: {}, desc: {}", responseCode, responseDesc);
+                request.setAttribute("MessageCode", responseCode);
+                return forward(Constants.FORWARD_RE_INPUT, mapping, request, ConstantsPayment.LOG_SUCCESS_CHECK_KOL_STATUS, ConstantsPayment.RESPONSE_FAIL, "7820");
+            }
+
+        }catch (Exception e){
+            request.setAttribute("MessageCode", "99DBFail");
+            return forward("retry", mapping);
+        }
+
+
+    }
+
+    public ActionForward generateQR(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        HttpSession session = request.getSession();
+        Map<String, Object> map = (Map<String, Object>) session.getAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE);
+
+        String refKey = (String) map.get(AuthenImproveConstant.SESSION_KEY.REF_KEY);
+        logger.info("refKey {}", refKey);
+
+        StringBuilder sb =new StringBuilder();
+        sb.append("  {  ");
+        sb.append("      \"refSys\" : \"EPAY_AUTH\",  ");
+        sb.append("      \"refKey\" : \""+refKey+"\",  ");
+        sb.append("      \"refType\": \"01\"  ");
+        sb.append("  }  ");
+
+
+        try {
+            String encrypted = AuthenImproveService.encrypt(sb.toString());
+
+            QRCodeWriter barcodeWriter = new QRCodeWriter();
+            BitMatrix bitMatrix = barcodeWriter.encode(encrypted, BarcodeFormat.QR_CODE, 200, 200);
+
+            BufferedImage image = new BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB);
+            image.createGraphics();
+
+            Graphics2D graphics = (Graphics2D) image.getGraphics();
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, 200, 200);
+            graphics.setColor(Color.BLACK);
+
+            for (int i = bitMatrix.getTopLeftOnBit()[0]; i < 200; i++) {
+                for (int j = bitMatrix.getTopLeftOnBit()[1]; j < 200; j++) {
+                    if (bitMatrix.get(i, j)) {
+                        graphics.fillRect(i, j, 1, 1);
+                    }
+                }
+            }
+            response.setContentType("image/png");
+            OutputStream os = response.getOutputStream();
+
+            ImageIO.write(image, "png", os);
+        } catch (WriterException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+        return null;
+    }
+
+    public ActionForward checkIsReceiveInfo(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        HttpSession session = request.getSession();
+
+        Map<String, Object> map = (Map<String, Object>) session.getAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE);
+        String refKey = (String) map.get(AuthenImproveConstant.SESSION_KEY.REF_KEY);
+        logger.info("refKey {}", refKey);
+
+        String status = "";
+        String message = "";
+
+        AuthenImproveService improceService = new AuthenImproveService();
+        try{
+            EpayAuthLogRequest epayAuthLogRequest = improceService.getEPayAuthLogRequestByRefKey(refKey);
+            if(null != epayAuthLogRequest){
+                if(AuthenImproveConstant.REQUEST_STATUS.KMA_INSERT.equals(epayAuthLogRequest.getRequestStatus())){
+                    status = "00";
+                    message = "OK";
+
+                    String object = epayAuthLogRequest.getInputParam();
+                    ObjectMapper mapper = new ObjectMapper();
+                    AuthenImproveRequest kmaBody = mapper.readValue(object, AuthenImproveRequest.class);
+                    map.put(AuthenImproveConstant.SESSION_KEY.KMA_BODY, kmaBody);
+
+                    session.setAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE, map);
+
+                } else if(AuthenImproveConstant.REQUEST_STATUS.REGISTERED.equals(epayAuthLogRequest.getRequestStatus())){
+                    status = "95";
+                    message = "Already Registered";
+                    session.setAttribute(AuthenImproveConstant.SESSION_KEY.FAIL_KMA_ALREADY_REGISTERED, status);
+                } else {
+                    status = "90";
+                    message = "Not yet";
+                }
+            }
+        } catch (PopulateDataException e) {
+            status = "99";
+            message = e.getMessage();
+            e.printStackTrace();
+        } catch (JsonParseException e) {
+            status = "99";
+            message = e.getMessage();
+            e.printStackTrace();
+        } catch (JsonMappingException e) {
+            status = "99";
+            message = e.getMessage();
+            e.printStackTrace();
+        } catch (IOException e) {
+            status = "99";
+            message = e.getMessage();
+            e.printStackTrace();
+        }
+
+        StringBuilder sb =new StringBuilder();
+        sb.append("  {  ");
+        sb.append("      \"refKey\" : \""+refKey+"\",  ");
+        sb.append("      \"status\" : \""+status+"\",  ");
+        sb.append("      \"message\": \""+message+"\"  ");
+        sb.append("  }  ");
+
+        response.setContentType("application/json");
+        logger.info("Response checkIsReceiveInfo");
+        logger.info("refKey {}", refKey);
+        logger.info("status {}", status);
+        logger.info("message {}", response);
+        try {
+            OutputStream os = response.getOutputStream();
+            os.write(sb.toString().getBytes());
+            os.flush();
+            os.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
+    public ActionForward kmasetpin(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        String forwardName = "success";
+        logger.info("kmasetpin");
+
+        HttpSession session = request.getSession();
+        Map<String, Object> map = (Map<String, Object>) session.getAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE);
+//        AuthenImproveService improveService = new AuthenImproveService();
+
+        String userType = (String) map.get(AuthenImproveConstant.SESSION_KEY.USER_TYPE);
+        logger.info("userType : {}", userType);
+
+        try {
+            String refKey = (String) map.get(AuthenImproveConstant.SESSION_KEY.REF_KEY);
+            logger.info("refKey {}", refKey);
+
+            if (null == map.get(AuthenImproveConstant.SESSION_KEY.KMA_BODY)){
+                request.setAttribute("MessageCode", "95");
+                throw new AuthenFailedException("No KMA Body");
+            }
+
+            AuthenImproveRequest kmaBody = (AuthenImproveRequest) map.get(AuthenImproveConstant.SESSION_KEY.KMA_BODY);
+            String username = kmaBody.getData().getMobileNo();
+
+            logger.info("transformAuthenProfile");
+            EpayAuthProfile transformKMAProfile = transformKMAProfile(kmaBody, userType, username);
+
+            String xMobileNo = (String) map.get(AuthenImproveConstant.SESSION_KEY.MOBILE);
+            String xCitizen = (String) map.get(AuthenImproveConstant.SESSION_KEY.ID_CARD);
+
+            String citizenId = kmaBody.getData().getCitizenId();
+            String mobilNo = kmaBody.getData().getMobileNo();
+
+            if (!xMobileNo.equals(mobilNo) || !xCitizen.equals(citizenId)) {
+                request.setAttribute("MessageCode", "95");
+                throw new AuthenFailedException("Citizen or MobileNo not match");
+            }
+            logger.info("mobilNo New {}", mobilNo);
+            logger.info("xMobileNo New {}", xMobileNo);
+//			String account = kmaBody.getData().getAccountList().get(0).getAccoountNo();
+//			logger.info("account {}", account);
+
+            map.put(AuthenImproveConstant.SESSION_KEY.USER_NAME, username);
+            map.put(AuthenImproveConstant.SESSION_KEY.MOBILE, mobilNo);
+//			map.put(AuthenImproveConstant.SESSION_KEY.ACCOUNT, account);
+            map.put(AuthenImproveConstant.SESSION_KEY.USER_TYPE, userType);
+            logger.info("setProfileId");
+            EpayAuthProfile epayAuthProfile = (EpayAuthProfile) map.get(AuthenImproveConstant.SESSION_KEY.EPAY_DTO);
+            logger.info("epayAuthProfile profile channel {}",epayAuthProfile.getChannel());
+
+            logger.info("epayAuthProfile mobilNo {}",epayAuthProfile.getMobileNo());
+            if(userType.equals(epayAuthProfile.getChannel())){
+                logger.info("same channel updating profile");
+                this.updateEpayProfile(epayAuthProfile, transformKMAProfile);
+            }
+
+            map.put(AuthenImproveConstant.SESSION_KEY.EPAY_DTO, epayAuthProfile);
+
+            map.put(AuthenImproveConstant.SESSION_KEY.REF_KEY, refKey);
+
+            session.setAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE, map);
+            logger.info("username :"+ username );
+//            improveService.nextForgotFlow(session, AuthenImproveConstant.FORGOT_STAGE.SETPIN);
+
+//        } catch (FlowFailedException e) {
+//            forwardName = "failed";
+//            request.setAttribute("MessageDesc", e.getMessage());
+//            e.printStackTrace();
+        } catch (AuthenFailedException e) {
+            forwardName = "failed";
+            request.setAttribute("registUserType", userType);
+            request.setAttribute("MessageDesc", e.getMessage());
+            e.printStackTrace();
+        } catch (Exception e) {
+            forwardName = "failed";
+            request.setAttribute("MessageDesc", e.getMessage());
+            e.printStackTrace();
+        }
+
+        return forward(forwardName, mapping);
+    }
+
+    private void updateEpayProfile(EpayAuthProfile target, EpayAuthProfile source){
+        target.setCitizenId(source.getCitizenId());
+        target.setTaxId(source.getTaxId());
+        target.setMobileNo(source.getMobileNo());
+        target.setEmail(source.getEmail());
+        target.setMobilContryCode(source.getMobilContryCode());
+        target.setFirstNameEN(source.getFirstNameEN());
+        target.setLastNameEN(source.getLastNameEN());
+        target.setFirstNameTH(source.getFirstNameTH());
+        target.setLastNameTH(source.getLastNameTH());
+    }
+
+    private EpayAuthProfile transformKMAProfile(AuthenImproveRequest kmaBody, String userType, String username) {
+        EpayAuthProfile result = new EpayAuthProfile();
+        result.setChannel(userType);
+        result.setCitizenId(kmaBody.getData().getCitizenId());
+        result.setTaxId("-");
+        result.setMobileNo(kmaBody.getData().getMobileNo());
+        result.setPin(null);
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+        Date dob1 = new Date();
+        try {
+            dob1 = dateFormat.parse(kmaBody.getData().getDateOfBirth());
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        java.sql.Date dob = new java.sql.Date(dob1.getTime());
+        result.setDateOfBirth(dob);
+        result.setEmail(kmaBody.getData().getEmail());
+        result.setAccountType("INDIVIDUAL");
+        result.setPaymentPermission("Y");
+
+        result.setIsActive("Y");
+        Date date = new Date();
+        Timestamp timestamp =new Timestamp(date.getTime());
+        result.setCreateDate(timestamp);
+        result.setCreateBy("EpaySystem");
+        result.setUpdateDate(timestamp);
+        result.setUpdateBy("EpaySystem");
+
+        result.setUserName(username);
+        result.setOtpToken("0");
+        result.setOtpTokenSerial("-");
+        result.setMobilContryCode(kmaBody.getData().getMobileCountryCode());
+
+        result.setFirstNameEN("-");
+        result.setLastNameEN("-");
+        result.setFirstNameTH("-");
+        result.setLastNameTH("-");
+
+        return result;
+    }
+
+
+    public ActionForward kmaChangeMobileNo (ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.info("kmaChangeMobileNo");
+        String forwardName = "web";
+        HttpSession session = request.getSession();
+        String userType = (String) session.getAttribute(AuthenImproveConstant.SESSION_KEY.USER_TYPE);
+        String userAgent = request.getHeader("User-Agent");
+        if(userAgent.contains("Mobi")) {
+            forwardName = "mobile";
+        }
+
+        AuthenImproveService improveService = new AuthenImproveService();
+        try{
+            String ipAddress = request.getRemoteAddr();
+
+            Locale lang = (Locale) session.getAttribute("org.apache.struts.action.LOCALE");
+            logger.info("lang {}", lang);
+            String langCode = "TH";
+            if(lang.equals(Locale.US)){
+                langCode = "EN";
+            }
+
+            List<EpayMobileCountryCode> countryCodeList = improveService.getMobileCountryCodeByLanguageCode(langCode);
+            logger.info("countryCodeList size {}", countryCodeList.size());
+            Map<String, Object> map = new HashMap<String, Object>();
+
+            String refKey = improveService.generatedRefKey();
+            map.put(AuthenImproveConstant.SESSION_KEY.REF_KEY, refKey);
+            logger.info("refKey {}", refKey);
+
+            map.put(AuthenImproveConstant.SESSION_KEY.COUNTRY_CODE, countryCodeList);
+
+            try {
+                logger.info("inserting log");
+                EpayAuthLogRequest epayAuthLogRequest = new EpayAuthLogRequest();
+                epayAuthLogRequest.setRequestType(improveService.translatorRequestType(userType));
+//                epayAuthLogRequest.setChannel(improveService.translatorChannel(userType));
+                epayAuthLogRequest.setRequestType(AuthenImproveConstant.REQUEST_TYPE.KMA_REGISTER);
+                epayAuthLogRequest.setChannel(AuthenImproveConstant.CHANNEL.KMA);
+                epayAuthLogRequest.setIpAddress(ipAddress);
+                epayAuthLogRequest.setRequestStatus(AuthenImproveConstant.REQUEST_STATUS.NEW);
+                epayAuthLogRequest.setRefKey(refKey);
+
+                Calendar calendar = Calendar.getInstance();
+                calendar.add(Calendar.MINUTE, 3);
+                map.put(AuthenImproveConstant.SESSION_KEY.REF_KEY_EXPIRED, 3);
+                Timestamp timestamp = new Timestamp(calendar.getTimeInMillis());
+                epayAuthLogRequest.setRefKeyExpired(timestamp);
+
+                improveService.insertEPayAuthLogRequest(epayAuthLogRequest);
+            } catch (Exception e) {
+                logger.info("inserting log error");
+                e.printStackTrace();
+            }
+
+            session.setAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE, map);
+//        } catch (FlowFailedException e) {
+//            forwardName = "failed";
+//            request.setAttribute("MessageDesc", e.getMessage());
+//            e.printStackTrace();
+        }
+        catch (Exception e) {
+            forwardName = "failed";
+            request.setAttribute("MessageDesc", e.getMessage());
+            e.printStackTrace();
+        }
+
+        logger.info("registUserType :"+ userType );
+        return forward(forwardName, mapping);
+    }
+
+    public ActionForward checkKmaVersion(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.info("checkKmaVersion");
+
+        String xRefKey = "";
+        String xStatus = "";
+        String xMessage = "";
+        try {
+            HttpSession session = request.getSession();
+
+            PushNotiModel model = new PushNotiModel();
+            model.setMobileNo(request.getParameter("mobileNo"));;
+            model.setCountryCode(request.getParameter("countryCode"));
+            model.setAuthType(AuthenImproveConstant.AUTH_TYPE_INT.REGISTER);
+
+            logger.info("checkKmaVersion "+ model.getMobileNo());
+
+            AuthenImproveService improceService = new AuthenImproveService();
+            PushNotiModelResponse pushNotiModelResponse = improceService.getAppVersion(model);
+
+            xStatus = pushNotiModelResponse.getCode();
+            xMessage = pushNotiModelResponse.getMessage();
+
+            if(null != pushNotiModelResponse.getError()) {
+                xStatus = pushNotiModelResponse.getError().getCode();
+                xMessage = pushNotiModelResponse.getError().getMessage();
+            }
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            xStatus = "99";
+            xMessage = ex.getMessage();
+        }
+
+        StringBuilder sb =new StringBuilder();
+        sb.append("  {  ");
+        sb.append("      \"status\" : \""+xStatus+"\",  ");
+        sb.append("      \"message\": \""+xMessage+"\"  ");
+        sb.append("  }  ");
+
+        response.setContentType("application/json");
+        try {
+            OutputStream os = response.getOutputStream();
+            os.write(sb.toString().getBytes());
+            os.flush();
+            os.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+        return null;
+    }
+
+    public ActionForward pushNoti(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.info("pushNoti");
+
+        String xRefKey = "";
+        String xStatus = "";
+        String xMessage = "";
+        try {
+            HttpSession session = request.getSession();
+            Map<String, Object> map = (Map<String, Object>) session.getAttribute(AuthenImproveConstant.PROFILE_KEY.PROFILE);
+
+            String refKey = (String) map.get(AuthenImproveConstant.SESSION_KEY.REF_KEY);
+            xRefKey = refKey;
+
+            PushNotiModel model = new PushNotiModel();
+            model.setMobileNo(request.getParameter("mobileNo"));;
+            model.setCountryCode(request.getParameter("countryCode"));
+            model.setRefId(refKey);
+            model.setAuthType(AuthenImproveConstant.AUTH_TYPE.REGISTER);
+
+            logger.info("pushNoti "+ model.getMobileNo());
+
+            AuthenImproveService improceService = new AuthenImproveService();
+            PushNotiModelResponse pushNotiModelResponse = improceService.pushNotificationToKMA(model);
+
+            xStatus = "00";
+            xMessage = "OK";
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            xStatus = "99";
+            xMessage = ex.getMessage();
+        }
+
+        StringBuilder sb =new StringBuilder();
+        sb.append("  {  ");
+        sb.append("      \"refKey\" : \""+xRefKey+"\",  ");
+        sb.append("      \"status\" : \""+xStatus+"\",  ");
+        sb.append("      \"message\": \""+xMessage+"\"  ");
+        sb.append("  }  ");
+
+        response.setContentType("application/json");
+        try {
+            OutputStream os = response.getOutputStream();
+            os.write(sb.toString().getBytes());
+            os.flush();
+            os.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+        return null;
+    }
+    public ActionForward reback(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        logger.info("reback");
+
+//        request.getSession().removeAttribute(AuthenImproveConstant.EPAYMENT_FLOW.REGISTER);
+//        request.getSession().removeAttribute(AuthenImproveConstant.EPAYMENT_FLOW.CHANGE);
+//        request.getSession().removeAttribute(AuthenImproveConstant.EPAYMENT_FLOW.FORGOT);
+//        request.getSession().removeAttribute(AuthenImproveConstant.PROFILE_KEY.CAPTCHA_FAILED);
+//        request.getSession().removeAttribute(AuthenImproveConstant.PROFILE_KEY.OLD_PIN_FAILED);
+
+        return forward("success", mapping);
+    }
+
+    public ActionForward backToLogin(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) {
+        return forward("success", mapping);
+//        HttpSession sess = request.getSession();
+//        WebUtil.getMerchant(request);
+//        Transaction transactionSDO = WebUtil.getTransaction(request);
+//        List<AccountList> accountList = transactionSDO.getAccountList();
+//        logger.debug("transaction type: [{}]", transactionSDO.getPaymentRequestType());
+//
+//        if (accountList != null && accountList.size() > 0) {
+//            String paymentType = (String) sess.getAttribute("KOLWSPaymentType");
+//            logger.debug("KOLWSPaymentType: {}", paymentType);
+//
+//            String paymentType2 = transactionSDO.getRefNo5();
+//            logger.debug("TEST paymentType2 : {}", paymentType2);
+//            if ("HOLDFUND".equals(paymentType2)) {
+//                return mapping.findForward("successMPayment");
+//            } else {
+//                return mapping.findForward(Constants.FORWARD_SUCCESS + Constants.FORWARD_DIRECT_DEBIT);
+//            }
+//        } else {
+//            logger.error("No KOL Account Holder.");
+//            return forwardFailure(mapping, request, ConstantsPayment.LOG_SUCCESS_CHECK_KOL_STATUS, ConstantsPayment.REASON_KOL_RESPONSE_ERROR_CODE, null);
+//        }
+    }
+
+}

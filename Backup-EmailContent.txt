@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="../resources/css/fonts.css" rel="stylesheet">
+    <style>
+.boxdata {
+  margin: left;
+  width: 60%;
+  border: 1px solid #FFC300;
+  padding: 10px;
+  background-color: #D2CECD;
+}
+ .divTable
+    {
+        display:  table;
+        width:auto;
+        background-color:#D2CECD;
+        border:1px solid #FFC300;
+
+    }
+
+    .divRow
+    {
+       display:table-row;
+       width:auto;
+    }
+
+    .divCell
+    {
+        float:left;
+        display:table-column;
+        width:200px;
+        background-color:#D2CECD;
+        text-align: left;
+    }
+     .divCell2
+    {
+        float:left;
+        display:table-column;
+        width:200px;
+        background-color:#D2CECD;
+        text-align: right;
+    }
+</style>
+</head>
+<body>
+
+
+<p style="font-family: 'Krungsri Simple'">เรียน คุณ{customerNameTh}</p>
+<p>เรื่อง แจ้งผลการทำรายการชำระเงินค่าสินค้า/บริการ กรุงศรีอีเพย์เมนต์</p>
+
+
+<div style ="display:  table; width:auto;background-color:#D2CECD;border:1px solid #FFC300;">
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">จำนวนเงินสุทธิ</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{total} บาท</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">จำนวนเงิน</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{amount} THB</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">ค่าธรรมเนียม</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{fee} THB</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">เลขที่บัญชีที่ชำระ</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{accountNo}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">ชื่อบัญชีที่ชำระ</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{accountName}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">ชำระให้ร้านค้า</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{merchantName}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">เลขที่รายการ</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{orderNo}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">วัน/เวลาที่ทำรายการ</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{dateTime}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">เบอร์โทรศัพท์</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{mobileNo}</div>
+    </div>
+</div>
+
+<p>หากท่านไม่ได้ทำรายการ หรือมีข้อสงสัยสำหรับรายการนี้ สามารถติดต่อ กรุงศรี คอลเซ็นเตอร์ 1572</p>
+<p>*** อีเมลนี้เป็นการแจ้งจากระบบอัตโนมัติ กรุณาอย่าตอบกลับ ***</p>
+<p>ขอขอบพระคุณที่ใช้บริการกรุงศรีอีเพย์เมนต์</p>
+<p>บริการกรุงศรีอีเพย์เมนต์</p>
+<p>ธนาคารกรุงศรีอยุธยา จำกัด (มหาชน)</p><br>
+
+<p>Dear {customerNameEng},</p>
+<p>Please be notified of your payment transaction via Krungsri E-Payment as follows:</p>
+
+
+<div style="display:  table; width:auto;background-color:#D2CECD;border:1px solid #FFC300;">
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Total</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{total} THB</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Amount</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{amount} THB</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Fee</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{fee} THB</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Account No.</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{accountNo}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Account Name</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{accountName}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">To merchant name</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{merchantName}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Order No.</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{orderNo}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Date/Time</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{dateTime}</div>
+    </div>
+    <div style="display:table-row;
+       width:auto;">
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: left;">Mobile No.</div>
+        <div style="float:left;display:table-column;width:200px;background-color:#D2CECD;text-align: right;">{mobileNo}</div>
+    </div>
+</div>
+
+<p>In case you are totally unaware of the transaction or the activity mentioned above,</p>
+<p>please immediately contact Krungsri Call Center 1572 to take necessary security actions</p>
+<p>*** This e-mail is automatically sent to you by system. Please do not reply.***</p>
+<p>Thank you for payment with Krungsri E-Payment.</p>
+<p>Krungsri E-Payment Service</p>
+<p>Bank of Ayudhya Public Company Limited</p>
+</body>
+</html>

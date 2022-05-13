@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<body>
+<p id = "phoneNumber">0842573856</p>
+<p id = "safe"></p>
+
+<script>
+
+document.getElementById("safe").innerHTML = formatPhoneNumber('0842573856');
+function formatPhoneNumber(element) {
+            if(element.length = 10) {
+				element = element.replace(/\W/gi, '').replace(/^(.{3})(.{3})(.*)$/, "$1-$2-$3");		
+                return hidePhoneValue(element);
+			}else{
+            	 return element;
+			}
+					
+}
+function hidePhoneValue(val) {
+	var len = val.length;
+	if (len >= 12) {
+		const regex = /\d{3}(?=-\d{3})/g;
+		const substr = "XXX";
+		return  val.replace(regex, substr);
+	}
+}
+
+</script>
+
+</body>
+</html>
+-------------------------------------------------------------------------
+
+JAVA
+
+
+
+public String fomatMobileNo(String element){
+        String safeMobileNo = null;
+        if (element.length() == 10) {
+            element = element.replaceFirst("(\\d{3})(\\d{3})(\\d+)", "$1-$2-$3");
+            String regex = "\\d{3}(?=-\\d{3})";
+            String substr = "XXX";
+            safeMobileNo = element.replaceAll(regex, substr);
+            logger.info(safeMobileNo);
+            return  safeMobileNo;
+        }else{
+            return  null;
+        }
+    }
