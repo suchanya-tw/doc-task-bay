@@ -1,0 +1,6 @@
+EPayment Mail Session
+
+mail/EPaymentMailSession
+
+localhost
+
